@@ -1,0 +1,58 @@
+name: Build & Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  ACR_REGISTRY: brainneuroregistry.azurecr.io
+  IMAGE_NAME: tribev2-app
+  RESOURCE_GROUP: brain-neuro-kr
+  CONTAINER_NAME: tribev2-app
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Instances
+        uses: azure/aci-deploy@v1
+        with:
+          resource-group: ${{ env.RESOURCE_GROUP }}
+          dns-name-label: tribev2-app
+          image: ${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          registry-login-server: ${{ env.ACR_REGISTRY }}
+          registry-username: ${{ secrets.ACR_USERNAME }}
+          registry-password: ${{ secrets.ACR_PASSWORD }}
+          name: ${{ env.CONTAINER_NAME }}
+          location: koreacentral
+          cpu: 4
+          memory: 8
+          ports: 8000
+          environment-variables: PYTHONUNBUFFERED=1
+          restart-policy: OnFailure
