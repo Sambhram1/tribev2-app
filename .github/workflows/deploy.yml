@@ -51,7 +51,7 @@ jobs:
           registry-password: ${{ secrets.ACR_PASSWORD }}
           name: ${{ env.CONTAINER_NAME }}
           location: koreacentral
-          cpu: 4
+          cpu: 2
           memory: 8
           ports: 8000
           environment-variables: PYTHONUNBUFFERED=1
