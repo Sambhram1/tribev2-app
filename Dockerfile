@@ -19,6 +19,10 @@ RUN pip install --no-cache-dir uv
 # Install tribev2 from source
 RUN pip install --no-cache-dir git+https://github.com/facebookresearch/tribev2.git
 
+# Patch tribev2: float16 is GPU-only; ACI runs CPU so use int8
+RUN sed -i 's/compute_type = "float16"/compute_type = "int8"/' \
+    /usr/local/lib/python3.11/site-packages/tribev2/eventstransforms.py
+
 # Copy application code
 COPY . .
 
