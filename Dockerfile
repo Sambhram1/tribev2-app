@@ -13,6 +13,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install uv (provides uvx, required by tribev2 for audio transcription)
+RUN pip install --no-cache-dir uv
+
 # Install tribev2 from source
 RUN pip install --no-cache-dir git+https://github.com/facebookresearch/tribev2.git
 
