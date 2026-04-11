@@ -64,42 +64,66 @@ input.addEventListener('change', () => {
   }
 });
 
-runBtn.addEventListener('click', async () => {
+runBtn.addEventListener('click', () => {
   const file = input.files[0];
   if (!file) return;
 
   runBtn.disabled = true;
   result.style.display = 'none';
   status.className = '';
-  status.textContent = 'Uploading…';
+  status.textContent = 'Uploading… 0%';
 
   const form = new FormData();
   form.append('video', file);
 
-  try {
-    status.textContent = 'Uploading…';
-    const res = await fetch('/predict', { method: 'POST', body: form });
+  const xhr = new XMLHttpRequest();
 
-    status.textContent = 'Running TRIBE v2…';
-    const data = await res.json();
-
-    if (!res.ok) {
-      status.className = 'err';
-      status.textContent = 'Error: ' + (data.detail || res.statusText);
-      return;
+  xhr.upload.addEventListener('progress', (e) => {
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      status.textContent = `Uploading… ${pct}%`;
     }
+  });
 
-    status.textContent = 'Done!';
-    document.getElementById('resShape').textContent = JSON.stringify(data.shape);
-    document.getElementById('resPreview').textContent = JSON.stringify(data.preview);
-    document.getElementById('dlLink').href = data.download_url;
-    result.style.display = 'block';
-  } catch (e) {
-    status.className = 'err';
-    status.textContent = 'Network error: ' + e.message;
-  } finally {
+  xhr.upload.addEventListener('load', () => {
+    status.textContent = 'Running TRIBE v2 inference… (this may take several minutes)';
+  });
+
+  xhr.addEventListener('load', () => {
     runBtn.disabled = false;
-  }
+    try {
+      const data = JSON.parse(xhr.responseText);
+      if (xhr.status !== 200) {
+        status.className = 'err';
+        status.textContent = 'Error: ' + (data.detail || xhr.statusText);
+        return;
+      }
+      status.textContent = 'Done!';
+      document.getElementById('resShape').textContent = JSON.stringify(data.shape);
+      document.getElementById('resPreview').textContent = JSON.stringify(data.preview);
+      document.getElementById('dlLink').href = data.download_url;
+      result.style.display = 'block';
+    } catch (e) {
+      status.className = 'err';
+      status.textContent = 'Parse error: ' + e.message;
+    }
+  });
+
+  xhr.addEventListener('error', () => {
+    runBtn.disabled = false;
+    status.className = 'err';
+    status.textContent = 'Network error — check that the server is running.';
+  });
+
+  xhr.addEventListener('timeout', () => {
+    runBtn.disabled = false;
+    status.className = 'err';
+    status.textContent = 'Request timed out after 1 hour.';
+  });
+
+  xhr.open('POST', '/predict');
+  xhr.timeout = 3_600_000; // 1-hour ceiling
+  xhr.send(form);
 });
 </script>
 </body>

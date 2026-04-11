@@ -1,5 +1,6 @@
 import os
 import uuid
+import shutil
 import tempfile
 import asyncio
 from contextlib import asynccontextmanager
@@ -51,8 +52,8 @@ async def predict(video: UploadFile = File(...)):
     # Save upload to a temp file
     tmp_path = Path(tempfile.gettempdir()) / f"tribe_{uuid.uuid4().hex}{ext}"
     try:
-        contents = await video.read()
-        tmp_path.write_bytes(contents)
+        with tmp_path.open("wb") as f:
+            shutil.copyfileobj(video.file, f)
 
         # Run inference in a thread so we don't block the event loop
         loop = asyncio.get_event_loop()
