@@ -41,19 +41,19 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Deploy to Azure Container Instances
-        uses: azure/aci-deploy@v1
-        with:
-          resource-group: ${{ env.RESOURCE_GROUP }}
-          dns-name-label: tribev2-app
-          image: ${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          registry-login-server: ${{ env.ACR_REGISTRY }}
-          registry-username: ${{ secrets.ACR_USERNAME }}
-          registry-password: ${{ secrets.ACR_PASSWORD }}
-          name: ${{ env.CONTAINER_NAME }}
-          location: koreacentral
-          cpu: 2
-          memory: 8
-          ports: 8000
-          environment-variables: PYTHONUNBUFFERED=1 HF_HOME=/app/cache
-          secure-environment-variables: HF_TOKEN=${{ secrets.HF_TOKEN }}
-          restart-policy: OnFailure
+        run: |
+          az container create \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name ${{ env.CONTAINER_NAME }} \
+            --image ${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --registry-login-server ${{ env.ACR_REGISTRY }} \
+            --registry-username ${{ secrets.ACR_USERNAME }} \
+            --registry-password ${{ secrets.ACR_PASSWORD }} \
+            --dns-name-label tribev2-app \
+            --location koreacentral \
+            --cpu 2 \
+            --memory 8 \
+            --ports 8000 \
+            --restart-policy OnFailure \
+            --environment-variables PYTHONUNBUFFERED=1 HF_HOME=/app/cache \
+            --secure-environment-variables HF_TOKEN=${{ secrets.HF_TOKEN }}
