@@ -54,6 +54,7 @@ jobs:
             --cpu 2 \
             --memory 8 \
             --ports 8000 \
+            --os-type Linux \
             --restart-policy OnFailure \
             --environment-variables PYTHONUNBUFFERED=1 HF_HOME=/app/cache \
             --secure-environment-variables HF_TOKEN=${{ secrets.HF_TOKEN }}
