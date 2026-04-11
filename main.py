@@ -9,6 +9,7 @@ from pathlib import Path
 
 import torch
 import numpy as np
+from huggingface_hub import login as hf_login
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +28,15 @@ MAX_DURATION_SECONDS = 300
 async def lifespan(app: FastAPI):
     global model
     DOWNLOAD_DIR.mkdir(exist_ok=True)
+
+    # Authenticate with HuggingFace so gated models (e.g. Llama-3.2-3B) are accessible
+    hf_token = os.environ.get("HF_TOKEN")
+    if hf_token:
+        hf_login(token=hf_token, add_to_git_credential=False)
+        print("HuggingFace login OK.")
+    else:
+        print("WARNING: HF_TOKEN not set — gated model downloads will fail.")
+
     print("Loading TRIBE v2 model …")
     from tribev2 import TribeModel  # type: ignore
     model = TribeModel.from_pretrained("facebook/tribev2", cache_folder="./cache")
