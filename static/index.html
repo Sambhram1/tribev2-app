@@ -91,13 +91,18 @@ runBtn.addEventListener('click', () => {
 
   xhr.addEventListener('load', () => {
     runBtn.disabled = false;
+    if (xhr.status !== 200) {
+      status.className = 'err';
+      try {
+        const data = JSON.parse(xhr.responseText);
+        status.textContent = 'Error: ' + (data.detail || xhr.statusText);
+      } catch {
+        status.textContent = 'Server error (' + xhr.status + '): ' + xhr.responseText.slice(0, 300);
+      }
+      return;
+    }
     try {
       const data = JSON.parse(xhr.responseText);
-      if (xhr.status !== 200) {
-        status.className = 'err';
-        status.textContent = 'Error: ' + (data.detail || xhr.statusText);
-        return;
-      }
       status.textContent = 'Done!';
       document.getElementById('resShape').textContent = JSON.stringify(data.shape);
       document.getElementById('resPreview').textContent = JSON.stringify(data.preview);
@@ -105,7 +110,7 @@ runBtn.addEventListener('click', () => {
       result.style.display = 'block';
     } catch (e) {
       status.className = 'err';
-      status.textContent = 'Parse error: ' + e.message;
+      status.textContent = 'Parse error: ' + e.message + '\n' + xhr.responseText.slice(0, 300);
     }
   });
 

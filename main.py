@@ -62,8 +62,8 @@ async def predict(video: UploadFile = File(...)):
             shutil.copyfileobj(video.file, f)
 
         # Trim to MAX_DURATION_SECONDS so long videos don't stall CPU inference
-        _ffmpeg_trim(str(tmp_path), str(trimmed_path), MAX_DURATION_SECONDS)
-        input_path = str(trimmed_path) if trimmed_path.exists() else str(tmp_path)
+        trimmed_ok = _ffmpeg_trim(str(tmp_path), str(trimmed_path), MAX_DURATION_SECONDS)
+        input_path = str(trimmed_path) if trimmed_ok else str(tmp_path)
 
         # Run inference in a thread so we don't block the event loop
         loop = asyncio.get_event_loop()
@@ -87,23 +87,32 @@ async def predict(video: UploadFile = File(...)):
     })
 
 
-def _ffmpeg_trim(src: str, dst: str, max_seconds: int) -> None:
-    """Trim video to max_seconds using ffmpeg (no re-encode, fast)."""
-    subprocess.run(
-        ["ffmpeg", "-y", "-i", src, "-t", str(max_seconds), "-c", "copy", dst],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=True,
-    )
+def _ffmpeg_trim(src: str, dst: str, max_seconds: int) -> bool:
+    """Trim video to max_seconds using ffmpeg (no re-encode, fast).
+    Returns True on success, False if ffmpeg is unavailable or fails."""
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", src, "-t", str(max_seconds), "-c", "copy", dst],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
 
 
 def _run_inference(video_path: str):
     """Blocking inference call – executed in a thread pool."""
-    # Use all available CPU cores and skip gradient tracking for ~20% speedup
     torch.set_num_threads(os.cpu_count() or 2)
     df = model.get_events_dataframe(video_path=video_path)
-    with torch.inference_mode():
-        preds, segments = model.predict(events=df)
+    # inference_mode can conflict with some model internals — fall back to no_grad
+    try:
+        with torch.inference_mode():
+            preds, segments = model.predict(events=df)
+    except Exception:
+        with torch.no_grad():
+            preds, segments = model.predict(events=df)
     return preds, segments
 
 
