@@ -1,11 +1,13 @@
 import os
 import uuid
 import shutil
+import subprocess
 import tempfile
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import torch
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
@@ -16,6 +18,9 @@ from fastapi.staticfiles import StaticFiles
 # ---------------------------------------------------------------------------
 model = None
 DOWNLOAD_DIR = Path("./downloads")
+
+# Cap input videos at 5 minutes to keep CPU inference time reasonable
+MAX_DURATION_SECONDS = 300
 
 
 @asynccontextmanager
@@ -51,15 +56,21 @@ async def predict(video: UploadFile = File(...)):
 
     # Save upload to a temp file
     tmp_path = Path(tempfile.gettempdir()) / f"tribe_{uuid.uuid4().hex}{ext}"
+    trimmed_path = Path(tempfile.gettempdir()) / f"tribe_{uuid.uuid4().hex}_trimmed.mp4"
     try:
         with tmp_path.open("wb") as f:
             shutil.copyfileobj(video.file, f)
 
+        # Trim to MAX_DURATION_SECONDS so long videos don't stall CPU inference
+        _ffmpeg_trim(str(tmp_path), str(trimmed_path), MAX_DURATION_SECONDS)
+        input_path = str(trimmed_path) if trimmed_path.exists() else str(tmp_path)
+
         # Run inference in a thread so we don't block the event loop
         loop = asyncio.get_event_loop()
-        preds, segments = await loop.run_in_executor(None, _run_inference, str(tmp_path))
+        preds, segments = await loop.run_in_executor(None, _run_inference, input_path)
     finally:
         tmp_path.unlink(missing_ok=True)
+        trimmed_path.unlink(missing_ok=True)
 
     # Persist predictions
     out_path = DOWNLOAD_DIR / "brain_predictions.npy"
@@ -76,10 +87,23 @@ async def predict(video: UploadFile = File(...)):
     })
 
 
+def _ffmpeg_trim(src: str, dst: str, max_seconds: int) -> None:
+    """Trim video to max_seconds using ffmpeg (no re-encode, fast)."""
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", src, "-t", str(max_seconds), "-c", "copy", dst],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
+
+
 def _run_inference(video_path: str):
     """Blocking inference call – executed in a thread pool."""
+    # Use all available CPU cores and skip gradient tracking for ~20% speedup
+    torch.set_num_threads(os.cpu_count() or 2)
     df = model.get_events_dataframe(video_path=video_path)
-    preds, segments = model.predict(events=df)
+    with torch.inference_mode():
+        preds, segments = model.predict(events=df)
     return preds, segments
 
 
